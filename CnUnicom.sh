@@ -93,6 +93,7 @@ EOF
     
     # 账号密码登录
     if [[ $status == 1 ]]; then
+        rm -rf $workdir/cookie
         curl -X POST -sA "$UA" -c $workdir/cookie "https://m.client.10010.com/mobileService/logout.htm?&desmobile=$username&version=android%40$unicom_version" >/dev/null
         curl -sA "$UA" -b $workdir/cookie -c $workdir/cookie -d @$workdir/signdata "https://m.client.10010.com/mobileService/login.htm" >/dev/null
         token=$(cat $workdir/cookie | grep -E "a_token" | awk  '{print $7}')
@@ -173,7 +174,7 @@ function membercenter() {
     curl -sLA "$UA" -b $workdir/cookie "https://m.client.10010.com/welfare-mall-front/mobile/winter/getpoints/v1"
     curl -X POST -sLA "$UA" -b $workdir/cookie --data "from=$(shuf -i 12345678901-98765432101 -n 1)" "https://m.client.10010.com/welfare-mall-front/mobile/winterTwo/getIntegral/v1"
     curl -X POST -sA "$UA" -b $workdir/cookie.SigninActivity --data "usernumberofjsp=$usernumberofjsp&flag=convert" http://m.client.10010.com/dailylottery/static/integral/choujiang
-    for ((i = 1; i <= 3; i++)); do
+    for ((i = 1; i <= 15; i++)); do
         curl -sA "$UA" -b $workdir/cookie.SigninActivity --data "goldnumber=10&banrate=30&usernumberofjsp=$usernumberofjsp" http://m.client.10010.com/dailylottery/static/integral/duihuan >/dev/null; sleep 1
         curl -X POST -sA "$UA" -b $workdir/cookie.SigninActivity --data "usernumberofjsp=$usernumberofjsp&flag=convert" http://m.client.10010.com/dailylottery/static/integral/choujiang | grep -qE "用户机会次数不足" && break
     done
@@ -190,7 +191,7 @@ function membercenter() {
     # 游戏宝箱
     curl -X POST -sA "$UA"  -b $workdir/cookie.SigninActivity -c $workdir/cookie.xybx --data "thirdUrl=https%3A%2F%2Fimg.client.10010.com%2Fshouyeyouxi%2Findex.html%23%2Fyouxibaoxiang" https://m.client.10010.com/mobileService/customer/getShareRedisInfo.htm >/dev/null
     echo; curl -X POST -sA "$UA" -b $workdir/cookie.xybx --data "methodType=reward&deviceType=Android&clientVersion=$unicom_version&isVideo=N" https://m.client.10010.com/game_box
-    echo; curl -sA "$UA" -b $workdir/cookie.xybx --data "methodType=taskGetReward&deviceType=Android&clientVersion=$unicom_version&taskCenterId=98" https://m.client.10010.com/producGameTaskCenter
+    echo; curl -sA "$UA" -b $workdir/cookie.xybx --data "methodType=taskGetReward&taskCenterId=187&clientVersion=$unicom_version&deviceType=Android" https://m.client.10010.com/producGameTaskCenter
     echo; curl -X POST -sA "$UA" -b $workdir/cookie.xybx --data "methodType=reward&deviceType=Android&clientVersion=$unicom_version&isVideo=Y" https://m.client.10010.com/game_box
     
     # 获得流量
@@ -238,6 +239,26 @@ function liulactive() {
     curl -X POST -sA "$UA" -e "$Referer" -b $workdir/cookie_liulactive -c $workdir/cookie_liulactive --data "productId=$productId&userLogin=$liulactiveuserLogin&ebCount=1000000&pageFrom=4" "https://m.client.10010.com/MyAccount/exchangeDFlow/exchange.htm?userLogin=$liulactiveuserLogin" | grep -B 1 "正在为您激活"
 }
 
+function niujieactive() {
+    # 牛节活动2.1-2.18，需要传入参数niujieactive开启
+    echo ${all_parameter[*]} | grep -qE "niujieactive" || return 0
+    # cookie_niujie
+    rm -rf $workdir/cookie_niujie
+    curl -sLA "$UA" -e "$Referer" -b $workdir/cookie -c $workdir/cookie_niujie "https://u.10010.cn/qA7nJ?yw_code=&desmobile=${username}&version=android@${unicom_version}" >/dev/null
+    Referer="https://img.client.10010.com/2021springfestival/index.html"
+    curl -X POST -sA "$UA" -e "$Referer" -b $workdir/cookie_niujie -c $workdir/cookie_niujie "https://m.client.10010.com/Niujie/calf/CalfFirstPage?click=1" >$workdir/niujie.log
+    # 每日一次任务
+    taskIds=($(curl -X POST -sA "$UA" -e "$Referer" -b $workdir/cookie_niujie "https://m.client.10010.com/Niujie/task/getTaskList" | grep -oE "taskId[^,]+" | cut -f3 -d'"' | tr "\n" " "))
+    for taskId in ${taskIds[*]}; do
+        sleep 1 && curl -X POST -sA "$UA" -b $workdir/cookie_niujie --data "taskId=$taskId" "https://m.client.10010.com/Niujie/task/doTask" | grep -oE "任务已完成" && break
+    done
+    # 每小时可以收集各场馆1000牛气
+    shops=($(cat $workdir/niujie.log | grep -oE "[a-zA-Z]+ShopVenue\":\"1000" | grep -oE "[a-zA-Z]+" | tr "\n" " "))
+    for shop in ${shops[*]}; do
+        sleep 1 && echo geting $shop status: $(curl -sA "$UA" -e "$Referer" -b $workdir/cookie_niujie "https://m.client.10010.com/Niujie/calf/receiveCalf?shop=$shop" | grep -oE "message[^,]+")
+    done  
+}
+
 function main() {
     # 签到任务
     for ((u = 0; u < ${#all_username_password[*]}; u++)); do
@@ -247,6 +268,7 @@ function main() {
         userlogin && userlogin_ook[u]=$(echo ${username:0:2}****${username:9}) || { userlogin_err[u]=$(echo ${username:0:2}****${username:9}); continue; }
         membercenter
         liulactive
+        niujieactive
         #rm -rf $workdir
     done
     echo; echo $(date) ${userlogin_err[*]} ${#userlogin_err[*]} 签到失败. ${userlogin_ook[*]} ${#userlogin_ook[*]} 签到完成.
